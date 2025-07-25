@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/aquasecurity/trivy/pkg/log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -22,12 +23,16 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
-const chunkSize = 5000
+const (
+	chunkSize        = 5000
+	vulnBucket       = "vulnerability"
+	dataSourceBucket = "data-source"
+	appVersion       = "99.9.9"
+	dbRepository     = "ghcr.io/aquasecurity/trivy-db"
+)
 
 func FetchTrivyDB(ctx context.Context, cacheDir string, light, quiet, skipUpdate bool) error {
-	_, _ = fmt.Fprintf(os.Stderr, "%s", "Fetching and updating Trivy DB ... \n")
-	appVersion := "99.9.9"
-	dbRepository := "ghcr.io/aquasecurity/trivy-db"
+	log.Logger.Info("Fetching and updating Trivy DB ... ")
 	dbPath := db2.Path(cacheDir)
 	dbDir := filepath.Dir(dbPath)
 	if err := os.MkdirAll(dbDir, 0700); err != nil {
@@ -41,25 +46,24 @@ func FetchTrivyDB(ctx context.Context, cacheDir string, light, quiet, skipUpdate
 	}
 
 	if needsUpdate {
-		_, _ = fmt.Fprintln(os.Stderr, "Need to update DB")
-		_, _ = fmt.Fprintf(os.Stderr, "DB Repository: %s\n", dbRepository)
-		_, _ = fmt.Fprintln(os.Stderr, "Downloading DB...")
+		log.Logger.Infof("Need to update DB, and DB Repository is %s", dbRepository)
+		log.Logger.Info("Downloading DB...")
 		if err = client.Download(ctx, cacheDir, types.RemoteOptions{}); err != nil {
 			return fmt.Errorf("failed to download vulnerability DB: %w", err)
 		}
 	}
-
-	_, _ = fmt.Fprintln(os.Stderr, "done")
+	log.Logger.Info("done")
 
 	return nil
 }
 
-func InitDB(ctx context.Context, dsn, vulnerabilityTableName, advisoryTableName string) error {
+func InitDB(ctx context.Context, dsn, vulnerabilityTableName, advisoryTableName string,
+	dataSourceTableName string) error {
 	var (
 		driver drivers.Driver
 		err    error
 	)
-	_, _ = fmt.Fprintf(os.Stderr, "%s", "Initializing vulnerability information tables ... ")
+	log.Logger.Info("Initializing vulnerability information tables ...")
 	db, d, err := dbOpen(dsn)
 	if err != nil {
 		return err
@@ -67,17 +71,17 @@ func InitDB(ctx context.Context, dsn, vulnerabilityTableName, advisoryTableName 
 	defer db.Close()
 	switch d {
 	case "mysql":
-		driver, err = mysql.New(db, vulnerabilityTableName, advisoryTableName)
+		driver, err = mysql.New(db, vulnerabilityTableName, advisoryTableName, dataSourceTableName)
 		if err != nil {
 			return err
 		}
 	case "postgres":
-		driver, err = postgres.New(db, vulnerabilityTableName, advisoryTableName)
+		driver, err = postgres.New(db, vulnerabilityTableName, advisoryTableName, dataSourceTableName)
 		if err != nil {
 			return err
 		}
 	case "sqlite":
-		driver, err = sqlite.New(db, vulnerabilityTableName, advisoryTableName)
+		driver, err = sqlite.New(db, vulnerabilityTableName, advisoryTableName, dataSourceTableName)
 		if err != nil {
 			return err
 		}
@@ -88,12 +92,13 @@ func InitDB(ctx context.Context, dsn, vulnerabilityTableName, advisoryTableName 
 	if err := driver.Migrate(ctx); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintln(os.Stderr, "done")
+	log.Logger.Info("done")
 	return nil
 }
 
-func UpdateDB(ctx context.Context, cacheDir, dsn, vulnerabilityTableName, advisoryTableName string, targetSources []string) error {
-	_, _ = fmt.Fprintf(os.Stderr, "%s", "Updating vulnerability information tables ... \n")
+func UpdateDB(ctx context.Context, cacheDir, dsn, vulnerabilityTableName, advisoryTableName string,
+	targetSources []string, dataSourceTableName string) error {
+	log.Logger.Info("Updating vulnerability information tables ...")
 	var (
 		driver drivers.Driver
 		err    error
@@ -106,17 +111,17 @@ func UpdateDB(ctx context.Context, cacheDir, dsn, vulnerabilityTableName, adviso
 	defer db.Close()
 	switch d {
 	case "mysql":
-		driver, err = mysql.New(db, vulnerabilityTableName, advisoryTableName)
+		driver, err = mysql.New(db, vulnerabilityTableName, advisoryTableName, dataSourceTableName)
 		if err != nil {
 			return err
 		}
 	case "postgres":
-		driver, err = postgres.New(db, vulnerabilityTableName, advisoryTableName)
+		driver, err = postgres.New(db, vulnerabilityTableName, advisoryTableName, dataSourceTableName)
 		if err != nil {
 			return err
 		}
 	case "sqlite":
-		driver, err = sqlite.New(db, vulnerabilityTableName, advisoryTableName)
+		driver, err = sqlite.New(db, vulnerabilityTableName, advisoryTableName, dataSourceTableName)
 		if err != nil {
 			return err
 		}
@@ -124,23 +129,23 @@ func UpdateDB(ctx context.Context, cacheDir, dsn, vulnerabilityTableName, adviso
 		return fmt.Errorf("unsupported driver '%s'", d)
 	}
 
-	trivydb, err := bolt.Open(filepath.Join(cacheDir, "db", "trivy.db"), 0600, &bolt.Options{Timeout: 1 * time.Second})
+	trivyDb, err := bolt.Open(filepath.Join(cacheDir, "db", "trivy.db"), 0600, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
 		return err
 	}
-	defer trivydb.Close()
+	defer trivyDb.Close()
 
-	if err := trivydb.View(func(tx *bolt.Tx) error {
-		_, _ = fmt.Fprintf(os.Stderr, ">> Updating table '%s' ...\n", vulnerabilityTableName)
+	if err := trivyDb.View(func(tx *bolt.Tx) error {
+		log.Logger.Infof("Updating table '%s' ...", vulnerabilityTableName)
 		if err := driver.TruncateVulns(ctx); err != nil {
 			return err
 		}
-		b := tx.Bucket([]byte("vulnerability"))
+		b := tx.Bucket([]byte(vulnBucket))
 		c := b.Cursor()
 		started := false
 		ended := false
 		for {
-			vulns := [][][]byte{}
+			var vulns [][][]byte
 			if !started {
 				k, v := c.First()
 				vulns = append(vulns, [][]byte{k, v})
@@ -164,7 +169,11 @@ func UpdateDB(ctx context.Context, cacheDir, dsn, vulnerabilityTableName, adviso
 			}
 		}
 
-		sourceRe := []*regexp.Regexp{}
+		if err = updateDataSource(dataSourceBucket, driver, ctx, tx); err != nil {
+			log.Logger.Fatalf("Failed to update data-source table:%s", err.Error())
+		}
+
+		var sourceRe []*regexp.Regexp
 		for _, s := range targetSources {
 			re, err := regexp.Compile(s)
 			if err != nil {
@@ -172,14 +181,13 @@ func UpdateDB(ctx context.Context, cacheDir, dsn, vulnerabilityTableName, adviso
 			}
 			sourceRe = append(sourceRe, re)
 		}
-
-		_, _ = fmt.Fprintf(os.Stderr, ">> Updating table '%s' ...\n", advisoryTableName)
+		log.Logger.Infof("Updating table '%s' ...", advisoryTableName)
 		if err := driver.TruncateVulnAdvisories(ctx); err != nil {
 			return err
 		}
 		if err := tx.ForEach(func(source []byte, b *bolt.Bucket) error {
-			s := string(source)
-			if s == "trivy" || s == "vulnerability" {
+			var s = string(source)
+			if s == vulnBucket {
 				return nil
 			}
 
@@ -195,10 +203,9 @@ func UpdateDB(ctx context.Context, cacheDir, dsn, vulnerabilityTableName, adviso
 					return nil
 				}
 			}
-
-			_, _ = fmt.Fprintf(os.Stderr, ">>> %s\n", s)
+			log.Logger.Infof("Writing security advisory: %s ...", s)
 			c := b.Cursor()
-			vulnds := [][][]byte{}
+			var secAdv [][][]byte
 			for pkg, _ := c.First(); pkg != nil; pkg, _ = c.Next() {
 				cb := b.Bucket(pkg)
 				if cb == nil {
@@ -207,10 +214,10 @@ func UpdateDB(ctx context.Context, cacheDir, dsn, vulnerabilityTableName, adviso
 				cbc := cb.Cursor()
 				for vID, v := cbc.First(); vID != nil; vID, v = cbc.Next() {
 					platform, segment := parsePlatformAndSegment(s)
-					vulnds = append(vulnds, [][]byte{vID, platform, segment, pkg, v})
+					secAdv = append(secAdv, [][]byte{vID, platform, segment, pkg, v})
 				}
 			}
-			chunked := lo.Chunk(vulnds, chunkSize)
+			chunked := lo.Chunk(secAdv, chunkSize)
 			for _, c := range chunked {
 				if err := driver.InsertVulnAdvisory(ctx, c); err != nil {
 					return err
@@ -225,7 +232,7 @@ func UpdateDB(ctx context.Context, cacheDir, dsn, vulnerabilityTableName, adviso
 	}); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(os.Stderr, "%s\n", "done")
+	log.Logger.Info("done")
 	return nil
 }
 
@@ -259,4 +266,39 @@ func parsePlatformAndSegment(s string) ([]byte, []byte) {
 		}
 	}
 	return platform, segment
+}
+func updateDataSource(dataSourceTableName string, driver drivers.Driver, ctx context.Context, tx *bolt.Tx) error {
+	log.Logger.Infof("Updating table '%s' ...", dataSourceTableName)
+	if err := driver.TruncateDataSource(ctx); err != nil {
+		return err
+	}
+	b := tx.Bucket([]byte(dataSourceBucket))
+	c := b.Cursor()
+	started := false
+	ended := false
+	for {
+		var dataSource [][][]byte
+		if !started {
+			k, v := c.First()
+			dataSource = append(dataSource, [][]byte{k, v})
+			started = true
+		}
+		for i := 0; i < chunkSize; i++ {
+			k, v := c.Next()
+			if k == nil {
+				ended = true
+				break
+			}
+			dataSource = append(dataSource, [][]byte{k, v})
+		}
+		if len(dataSource) > 0 {
+			if err := driver.InsertDataSource(ctx, dataSource); err != nil {
+				return err
+			}
+		}
+		if ended {
+			break
+		}
+	}
+	return nil
 }

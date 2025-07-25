@@ -1,95 +1,77 @@
 # trivy-db-to
 
-[![build](https://github.com/k1LoW/trivy-db-to/workflows/build/badge.svg)](https://github.com/k1LoW/trivy-db-to/actions)
+[![构建状态](https://github.com/y4ney/trivy-db-to/workflows/build/badge.svg)](https://github.com/y4ney/trivy-db-to/actions)
 
-`trivy-db-to` is a tool for migrating/converting vulnerability information from [Trivy DB](https://github.com/aquasecurity/trivy-db) to other datasource.
+`trivy-db-to` 是一款用于将 [Trivy DB](https://github.com/aquasecurity/trivy-db) 中的漏洞信息迁移或转换到其他数据源的工具。
 
-## Usage
+## 使用示例
 
-``` console
-$ trivy-db-to mysql://root:mypass@127.0.0.1:3306/mydb
-Fetching and updating Trivy DB ...
-19.35 MiB / 19.35 MiB [--------------------------------------------------] 100.00% 2.58 MiB p/s 8s
-done
-Initializing vulnerability information tables ... done
-Updating vulnerability information tables ...
->> Updating table 'vulnerabilities' ...
->> Update table 'vulnerability_advisories' ...
->>> GitHub Security Advisory Composer
->>> GitHub Security Advisory Maven
->>> GitHub Security Advisory Npm
->>> GitHub Security Advisory Nuget
->>> GitHub Security Advisory Pip
->>> GitHub Security Advisory Rubygems
->>> Oracle Linux 5
->>> Oracle Linux 6
->>> Oracle Linux 7
->>> Oracle Linux 8
->>> Photon OS 1.0
->>> Photon OS 2.0
->>> Photon OS 3.0
->>> Red Hat Enterprise Linux 5
->>> Red Hat Enterprise Linux 6
->>> Red Hat Enterprise Linux 7
-[...]
->>> ubuntu 17.10
->>> ubuntu 18.04
->>> ubuntu 18.10
->>> ubuntu 19.04
->>> ubuntu 19.10
->>> ubuntu 20.04
-done
-```
+1. 转化为 MySQL。
 
-## Support datasource
+    ```bash
+    trivy-db-to mysql://user:password@ip_address:port/dbname
+    ```
 
-- MySQL ( [schema](docs/schema/mysql/README.md) )
-- PostgreSQL ( [schema](docs/schema/postgres/README.md) )
-- SQLite ( [schema](docs/schema/sqlite/README.md) )
+2. 转化为 SQLite
 
-## Install
+    ```bash
+    trivy-db-to sqlite:///path/to/file.db
+    ```
+3. 转化为 PostgreSQL。
 
-**deb:**
+    ```bash
+   trivy-db-to postgresql://user:password@ip_address:port/dbname?sslmode=disable
+    ```
+![img.png](images/img.png)
 
-``` console
-$ export TRIVY_DB_TO_VERSION=X.X.X
-$ curl -o trivy-db-to.deb -L https://github.com/k1LoW/trivy-db-to/releases/download/v$TRIVY_DB_TO_VERSION/trivy-db-to_$TRIVY_DB_TO_VERSION-1_amd64.deb
-$ dpkg -i trivy-db-to.deb
-```
+## 支持的数据源
 
-**RPM:**
+- MySQL（[数据表结构文档](docs/schema/mysql/README.md)）
+- PostgreSQL（[数据表结构文档](docs/schema/postgres/README.md)）
+- SQLite（[数据表结构文档](docs/schema/sqlite/README.md)）
 
-``` console
-$ export TRIVY_DB_TO_VERSION=X.X.X
-$ yum install https://github.com/k1LoW/trivy-db-to/releases/download/v$TRIVY_DB_TO_VERSION/trivy-db-to_$TRIVY_DB_TO_VERSION-1_amd64.rpm
-```
 
-**apk:**
+## 安装方式
 
-``` console
-$ export TRIVY_DB_TO_VERSION=X.X.X
-$ curl -o trivy-db-to.apk -L https://github.com/k1LoW/trivy-db-to/releases/download/v$TRIVY_DB_TO_VERSION/trivy-db-to_$TRIVY_DB_TO_VERSION-1_amd64.apk
-$ apk add trivy-db-to.apk
-```
+- Debian 包 (deb)
 
-**homebrew tap:**
+   ```bash
+   export TRIVY_DB_TO_VERSION=X.X.X
+   curl -o trivy-db-to.deb -L https://github.com/k1LoW/trivy-db-to/releases/download/v$TRIVY_DB_TO_VERSION/trivy-db-to_$TRIVY_DB_TO_VERSION-1_amd64.deb
+   sudo dpkg -i trivy-db-to.deb
+   ```
 
-```console
-$ brew install k1LoW/tap/trivy-db-to
-```
+- RPM 包
 
-**manually:**
+   ```bash
+   export TRIVY_DB_TO_VERSION=X.X.X
+   sudo yum install https://github.com/k1LoW/trivy-db-to/releases/download/v$TRIVY_DB_TO_VERSION/trivy-db-to_$TRIVY_DB_TO_VERSION-1_amd64.rpm
+   ```
 
-Download binary from [releases page](https://github.com/k1LoW/trivy-db-to/releases)
+- Alpine 包 (apk)
 
-**go install:**
+   ```bash
+   export TRIVY_DB_TO_VERSION=X.X.X
+   curl -o trivy-db-to.apk -L https://github.com/k1LoW/trivy-db-to/releases/download/v$TRIVY_DB_TO_VERSION/trivy-db-to_$TRIVY_DB_TO_VERSION-1_amd64.apk
+   sudo apk add trivy-db-to.apk
+   ```
 
-```console
-$ go install github.com/k1LoW/trivy-db-to@latest
-```
+- Homebrew 安装
 
-**docker:**
+   ```bash
+   brew install k1LoW/tap/trivy-db-to
+   ```
 
-```console
-$ docker pull ghcr.io/k1low/trivy-db-to:latest
-```
+- 手动下载：从 [发布页面](https://github.com/y4ney/trivy-db-to/releases) 下载对应平台的二进制文件。
+
+- 通过 Go 安装
+
+   ```bash
+   go install github.com/y4ney/trivy-db-to@latest
+   ```
+
+- Docker 镜像
+
+   ```bash
+   docker pull y4ney/trivy-db-to:latest
+   ```

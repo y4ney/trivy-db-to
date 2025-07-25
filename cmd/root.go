@@ -25,7 +25,6 @@ import (
 	"context"
 	"os"
 
-	trivylog "github.com/aquasecurity/trivy/pkg/log"
 	"github.com/k1LoW/trivy-db-to/internal"
 	"github.com/k1LoW/trivy-db-to/version"
 	"github.com/shibukawa/configdir"
@@ -39,7 +38,8 @@ var (
 	skipUpdate               bool
 	cacheDir                 string
 	vulnerabilitiesTableName string
-	adivisoryTableName       string
+	advisoryTableName        string
+	dataSourceTableName      string
 	sources                  []string
 )
 
@@ -61,12 +61,12 @@ var rootCmd = &cobra.Command{
 		}
 
 		if !skipInit {
-			if err := internal.InitDB(ctx, dsn, vulnerabilitiesTableName, adivisoryTableName); err != nil {
+			if err := internal.InitDB(ctx, dsn, vulnerabilitiesTableName, advisoryTableName, dataSourceTableName); err != nil {
 				return err
 			}
 		}
 
-		if err := internal.UpdateDB(ctx, cacheDir, dsn, vulnerabilitiesTableName, adivisoryTableName, sources); err != nil {
+		if err := internal.UpdateDB(ctx, cacheDir, dsn, vulnerabilitiesTableName, advisoryTableName, sources, dataSourceTableName); err != nil {
 			return err
 		}
 
@@ -77,12 +77,6 @@ var rootCmd = &cobra.Command{
 func Execute() {
 	rootCmd.SetOut(os.Stdout)
 	rootCmd.SetErr(os.Stderr)
-
-	// disable trivy logger
-	if err := trivylog.InitLogger(false, true); err != nil {
-		rootCmd.PrintErrln(err)
-		os.Exit(1)
-	}
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
@@ -90,13 +84,13 @@ func Execute() {
 
 func init() {
 	rootCmd.Flags().BoolVarP(&light, "light", "", false, "light")
-	// rootCmd.Flags().BoolVarP(&quiet, "quiet", "", false, "quiet")
 	quiet = false
 	rootCmd.Flags().BoolVarP(&skipInit, "skip-init-db", "", false, "skip initializing target datasource")
 	rootCmd.Flags().BoolVarP(&skipUpdate, "skip-update", "", false, "skip updating Trivy DB")
 	rootCmd.Flags().StringVarP(&cacheDir, "cache-dir", "", "", "cache dir")
 	rootCmd.Flags().StringVarP(&vulnerabilitiesTableName, "vulnerabilities-table-name", "", "vulnerabilities", "Vulnerabilities Table Name")
-	rootCmd.Flags().StringVarP(&adivisoryTableName, "advisory-table-name", "", "vulnerability_advisories", "Vulnerability Advisories Table Name")
+	rootCmd.Flags().StringVarP(&advisoryTableName, "advisory-table-name", "", "vulnerability_advisories", "Vulnerability Advisories Table Name")
+	rootCmd.Flags().StringVarP(&dataSourceTableName, "data-source-table-name", "", "data_source", "Data Source Table Name")
 	rootCmd.Flags().StringArrayVarP(&sources, "source", "", nil, "Vulnerability Source (supporting regexp)")
 }
 

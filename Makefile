@@ -1,4 +1,4 @@
-PKG = github.com/k1LoW/trivy-db-to
+PKG = github.com/y4ney/trivy-db-to
 COMMIT = $$(git describe --tags --always)
 OSNAME=${shell uname -s}
 ifeq ($(OSNAME),Darwin)
@@ -54,7 +54,7 @@ depsdev:
 	go install github.com/Songmu/ghch/cmd/ghch@latest
 	go install github.com/Songmu/gocredits/cmd/gocredits@latest
 	go install github.com/xo/usql@latest
-	go install github.com/k1LoW/tbls@latest
+	go install github.com/y4ney/tbls@latest
 
 prerelease:
 	git pull origin --tag
